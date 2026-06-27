@@ -164,4 +164,16 @@
   .treejs-label {
     vertical-align: middle;
   }
+
+  .treejs-tokens {
+    vertical-align: middle;
+    margin-left: 10px;
+    font-size: 11px;
+    font-weight: 300;
+    color: #aaa;
+  }
+
+  .treejs-node__ignored > .treejs-tokens {
+    color: var(--bordercolor-ignored);
+  }
 }

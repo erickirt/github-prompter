@@ -16,6 +16,7 @@ const el = {
   copyBtn: document.getElementById('copy-files-btn'),
   rememberBtn: document.getElementById('remember-btn'),
   tokenEstimation: document.getElementById('token-estimation'),
+  showSizesToggle: document.getElementById('show-sizes-toggle'),
 };
 
 const state = {
@@ -97,6 +98,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   el.copyBtn.addEventListener('click', copySelectedFiles);
   el.rememberBtn.addEventListener('click', rememberSelection);
   el.backToTreeBtn.addEventListener('click', () => switchView('tree'));
+
+  // Restore and wire the "Sizes" toggle (show/hide per-item token counts)
+  const { showSizes = true } = await chrome.storage.sync.get('showSizes');
+  el.showSizesToggle.checked = showSizes;
+  applyShowSizes(showSizes);
+  el.showSizesToggle.addEventListener('change', () => {
+    const show = el.showSizesToggle.checked;
+    applyShowSizes(show);
+    chrome.storage.sync.set({ showSizes: show });
+  });
 
   loadRepository(owner, repo, branchFromUrl, dirPath);
 });
@@ -181,6 +192,18 @@ const updateCopyBtn = (selected) => {
   updateTokenEstimation(validFiles);
 };
 
+// Show/hide the per-item token counts in the tree
+const applyShowSizes = (show) => {
+  document.body.classList.toggle('hide-sizes', !show);
+};
+
+// Compact token label for tree rows, e.g. 980, 1.2k, 1.4m
+const formatTokens = (tokens) => {
+  if (tokens < 1000) return String(tokens);
+  if (tokens < 1_000_000) return `${(tokens / 1000).toFixed(1)}k`;
+  return `${(tokens / 1_000_000).toFixed(1)}m`;
+};
+
 // Calculate and display token estimation based on file sizes
 const updateTokenEstimation = (validFiles) => {
   // Calculate total size of valid files
@@ -221,14 +244,21 @@ const buildTree = (items = []) => {
   });
 
   const toTreeData = (obj) => Object.values(obj)
-    .map((item) => ({
-      id: item.id,
-      text: item.text,
-      size: item.size || 0,
-      ignored: isIgnored(item.id, state.ignoreRegex),
-      children: item.type === 'directory' ? toTreeData(item.children) : [],
-      attributes: { type: item.type },
-    }))
+    .map((item) => {
+      const children = item.type === 'directory' ? toTreeData(item.children) : [];
+      const size = item.type === 'directory'
+        ? children.reduce((sum, c) => sum + c.size, 0)
+        : (item.size || 0);
+      return {
+        id: item.id,
+        text: item.text,
+        size,
+        tokenLabel: formatTokens(Math.ceil(size / 4)),
+        ignored: isIgnored(item.id, state.ignoreRegex),
+        children,
+        attributes: { type: item.type },
+      };
+    })
     .sort((a, b) => {
       if (a.attributes.type !== b.attributes.type) return a.attributes.type === 'directory' ? -1 : 1;
       return a.text.localeCompare(b.text);
@@ -244,9 +274,13 @@ const renderTree = (treeData) => {
     ? `.../${state.repo.subDir.split('/').slice(-2).join('/')}`
     : `${state.repo.name}`;
 
+  const rootSize = treeData.reduce((sum, c) => sum + c.size, 0);
+
   const rootNode = {
     id: 'root',
     text: rootLabel,
+    size: rootSize,
+    tokenLabel: formatTokens(Math.ceil(rootSize / 4)),
     ignored: false,
     children: treeData,
     attributes: { type: 'directory' },

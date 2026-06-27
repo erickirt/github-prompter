@@ -603,6 +603,14 @@ export default class Tree {
     label.textContent = node.text ?? ''; // Use textContent for security, handle missing text
     li.appendChild(label);
 
+    // Add token count badge if provided by the caller
+    if (node.tokenLabel) {
+      const tokens = document.createElement('span');
+      tokens.classList.add('treejs-tokens');
+      tokens.textContent = node.tokenLabel;
+      li.appendChild(tokens);
+    }
+
     // Store node ID directly on the element for easy retrieval
     li.nodeId = node.id;
 
